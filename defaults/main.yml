@@ -2,12 +2,10 @@
 # Role: healthchecks
 # Default variables (lowest priority - can be overridden).
 #
-# Native install of Healthchecks (https://healthchecks.io) on Debian:
-# Python venv, PostgreSQL, gunicorn and systemd. No Docker or Podman.
-# The reverse proxy / TLS is supplied by the caller (webproxy in the
-# caret ansible repo); this role listens on 127.0.0.1:8000.
+# Native install of Healthchecks on Rocky Linux 9 (and Debian):
+# Python 3.12 system-wide, dependencies in an app-local lib dir (no venv),
+# PostgreSQL 16 from PGDG on EL9, gunicorn, systemd. No Docker/Podman.
 
-# Release tag pinned for reproducible installs. Bump deliberately.
 healthchecks_version: "v5.0.3"
 healthchecks_repo: "https://github.com/healthchecks/healthchecks.git"
 
@@ -15,17 +13,19 @@ healthchecks_user: "healthchecks"
 healthchecks_group: "healthchecks"
 healthchecks_app_dir: "/opt/healthchecks"
 healthchecks_src_dir: "{{ healthchecks_app_dir }}/app"
-healthchecks_venv_dir: "{{ healthchecks_app_dir }}/venv"
+# No virtualenv: pip installs into this directory and PYTHONPATH points here.
+healthchecks_python_lib_dir: "{{ healthchecks_app_dir }}/lib"
 
 healthchecks_config_dir: "/etc/healthchecks"
 healthchecks_env_file: "{{ healthchecks_config_dir }}/healthchecks.env"
 healthchecks_sbin_dir: "/usr/local/sbin"
 healthchecks_unit_dir: "/etc/systemd/system"
 
-healthchecks_python: "python3"
+# Rocky 9 AppStream provides python3.12. Debian 13 uses python3 (3.13).
+healthchecks_python: "{{ 'python3.12' if ansible_os_family == 'RedHat' else 'python3' }}"
 healthchecks_become: true
 
-# Ownership used by the app dir and the config/unit files. Molecule
+# Ownership used by the app/lib dir and the config/unit files. Molecule
 # overrides these because it runs unprivileged.
 healthchecks_app_owner: "{{ healthchecks_user }}"
 healthchecks_app_group: "{{ healthchecks_group }}"
@@ -61,7 +61,10 @@ healthchecks_db_user: "healthchecks"
 healthchecks_db_password: ""
 healthchecks_db_host: "127.0.0.1"
 healthchecks_db_port: 5432
-healthchecks_postgresql_service: "postgresql"
+healthchecks_postgresql_version: 16
+healthchecks_pgdg_repo_url: "https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+healthchecks_postgresql_service: "postgresql-16"
+healthchecks_postgresql_data_dir: "/var/lib/pgsql/16/data"
 healthchecks_postgresql_socket: "/var/run/postgresql"
 
 # Outbound mail. Port 25 internally to mail.caret.be; no TLS on the LAN.

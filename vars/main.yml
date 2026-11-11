@@ -1,10 +1,22 @@
 ---
-# Debian/Ubuntu packages. Python 3.12+ is required by Healthchecks 5.x;
-# Debian 13 (trixie) ships 3.13. Use a Debian 12/13 host.
-healthchecks_packages:
+healthchecks_base_packages_redhat:
+  - "git"
+  - "python3.12"
+  - "python3.12-pip"
+  - "python3.12-devel"
+  - "gcc"
+  - "gcc-c++"
+  - "make"
+  - "libffi-devel"
+  - "openssl-devel"
+  - "libcurl-devel"
+  - "pkgconf-pkg-config"
+  - "python3-psycopg2"
+
+healthchecks_base_packages_debian:
   - "git"
   - "python3"
-  - "python3-venv"
+  - "python3-pip"
   - "python3-dev"
   - "build-essential"
   - "libpq-dev"
@@ -12,8 +24,22 @@ healthchecks_packages:
   - "libcurl4-openssl-dev"
   - "libssl-dev"
   - "pkg-config"
-  - "postgresql"
   - "python3-psycopg2"
+
+healthchecks_base_packages: >-
+  {{ healthchecks_base_packages_redhat
+     if ansible_os_family == 'RedHat'
+     else healthchecks_base_packages_debian }}
+
+healthchecks_postgresql_packages_redhat:
+  - "postgresql16-server"
+  - "postgresql16-contrib"
+healthchecks_postgresql_packages_debian:
+  - "postgresql"
+healthchecks_postgresql_packages: >-
+  {{ healthchecks_postgresql_packages_redhat
+     if ansible_os_family == 'RedHat'
+     else healthchecks_postgresql_packages_debian }}
 
 healthchecks_environment:
   DEBUG: "False"
@@ -40,3 +66,4 @@ healthchecks_environment:
   APPRISE_ENABLED: "{{ healthchecks_apprise_enabled | bool | lower }}"
   PROMETHEUS_ENABLED: "{{ healthchecks_prometheus_enabled | bool | lower }}"
   SECURE_PROXY_SSL_HEADER: "HTTP_X_FORWARDED_PROTO,https"
+  PYTHONPATH: "{{ healthchecks_python_lib_dir }}"

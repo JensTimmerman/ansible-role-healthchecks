@@ -6,17 +6,75 @@
       - "healthchecks_admin_password | length > 0"
       - "healthchecks_db_engine in ['postgresql', 'sqlite']"
       - "healthchecks_db_engine != 'postgresql' or healthchecks_db_password | length > 0"
-      - "not (healthchecks_assert_os | bool) or ansible_os_family == 'Debian'"
+      - >-
+        not (healthchecks_assert_os | bool) or
+        ansible_os_family == 'Debian' or
+        (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9')
     fail_msg: >-
       Healthchecks needs a non-empty SECRET_KEY, admin password and (for
-      PostgreSQL) DB password. This role targets Debian 12/13 (Python 3.12+).
+      PostgreSQL) DB password. This role supports Rocky Linux 9 (Python 3.12
+      from AppStream) and Debian 12/13.
     quiet: true
 
-- name: "Install Healthchecks system packages"
+- name: "Install base packages"
   ansible.builtin.package:
-    name: "{{ healthchecks_packages }}"
+    name: "{{ healthchecks_base_packages }}"
     state: "present"
   when: "healthchecks_manage_packages | bool"
+  become: "{{ healthchecks_become }}"
+
+- name: "Install the PGDG repository (Rocky 9)"
+  ansible.builtin.dnf:
+    name: "{{ healthchecks_pgdg_repo_url }}"
+    state: "present"
+    disable_gpg_check: true
+  when:
+    - "healthchecks_manage_packages | bool"
+    - "healthchecks_manage_database | bool"
+    - "healthchecks_db_engine == 'postgresql'"
+    - "ansible_os_family == 'RedHat'"
+  become: "{{ healthchecks_become }}"
+
+- name: "Disable the distro PostgreSQL module (Rocky 9)"
+  ansible.builtin.command:
+    cmd: "dnf -qy module disable postgresql"
+  when:
+    - "healthchecks_manage_packages | bool"
+    - "healthchecks_manage_database | bool"
+    - "healthchecks_db_engine == 'postgresql'"
+    - "ansible_os_family == 'RedHat'"
+  changed_when: true
+  failed_when: false
+  become: "{{ healthchecks_become }}"
+
+- name: "Install PostgreSQL packages"
+  ansible.builtin.package:
+    name: "{{ healthchecks_postgresql_packages }}"
+    state: "present"
+  when:
+    - "healthchecks_manage_packages | bool"
+    - "healthchecks_manage_database | bool"
+    - "healthchecks_db_engine == 'postgresql'"
+  become: "{{ healthchecks_become }}"
+
+- name: "Initialize the PostgreSQL 16 cluster (Rocky 9)"
+  ansible.builtin.command:
+    cmd: "/usr/pgsql-{{ healthchecks_postgresql_version }}/bin/postgresql-{{ healthchecks_postgresql_version }}-setup initdb"
+    creates: "{{ healthchecks_postgresql_data_dir }}/PG_VERSION"
+  when:
+    - "healthchecks_manage_database | bool"
+    - "healthchecks_db_engine == 'postgresql'"
+    - "ansible_os_family == 'RedHat'"
+  become: "{{ healthchecks_become }}"
+
+- name: "Ensure PostgreSQL is running"
+  ansible.builtin.service:
+    name: "{{ healthchecks_postgresql_service }}"
+    state: "started"
+    enabled: true
+  when:
+    - "healthchecks_manage_database | bool"
+    - "healthchecks_db_engine == 'postgresql'"
   become: "{{ healthchecks_become }}"
 
 - name: "Create the Healthchecks group"
@@ -32,7 +90,7 @@
     name: "{{ healthchecks_user }}"
     group: "{{ healthchecks_group }}"
     home: "{{ healthchecks_app_dir }}"
-    shell: "/usr/sbin/nologin"
+    shell: "/sbin/nologin"
     system: true
     create_home: true
     state: "present"
@@ -48,21 +106,12 @@
     mode: "{{ item.mode }}"
   loop:
     - {path: "{{ healthchecks_app_dir }}", owner: "{{ healthchecks_app_owner }}", group: "{{ healthchecks_app_group }}", mode: "0755"}
+    - {path: "{{ healthchecks_python_lib_dir }}", owner: "{{ healthchecks_app_owner }}", group: "{{ healthchecks_app_group }}", mode: "0755"}
     - {path: "{{ healthchecks_config_dir }}", owner: "{{ healthchecks_file_owner }}", group: "{{ healthchecks_file_group }}", mode: "0700"}
     - {path: "{{ healthchecks_sbin_dir }}", owner: "{{ healthchecks_file_owner }}", group: "{{ healthchecks_file_group }}", mode: "0755"}
     - {path: "{{ healthchecks_unit_dir }}", owner: "{{ healthchecks_file_owner }}", group: "{{ healthchecks_file_group }}", mode: "0755"}
   loop_control:
     label: "{{ item.path }}"
-  become: "{{ healthchecks_become }}"
-
-- name: "Ensure PostgreSQL is running"
-  ansible.builtin.service:
-    name: "{{ healthchecks_postgresql_service }}"
-    state: "started"
-    enabled: true
-  when:
-    - "healthchecks_manage_database | bool"
-    - "healthchecks_db_engine == 'postgresql'"
   become: "{{ healthchecks_become }}"
 
 - name: "Create the PostgreSQL role"
@@ -103,31 +152,35 @@
   become: "{{ healthchecks_become }}"
   become_user: "{{ healthchecks_user }}"
 
-- name: "Create the virtualenv and install Python requirements"
-  ansible.builtin.pip:
-    requirements: "{{ healthchecks_src_dir }}/requirements.txt"
-    virtualenv: "{{ healthchecks_venv_dir }}"
-    virtualenv_command: "{{ healthchecks_python }} -m venv"
-    state: "present"
-    extra_args: "--upgrade"
+- name: "Install Python dependencies into {{ healthchecks_python_lib_dir }}"
+  ansible.builtin.command:
+    cmd: >-
+      {{ healthchecks_python }} -m pip install --no-cache-dir --upgrade
+      --target {{ healthchecks_python_lib_dir }}
+      -r {{ healthchecks_src_dir }}/requirements.txt gunicorn
+    creates: "{{ healthchecks_python_lib_dir }}/.installed-{{ healthchecks_version }}"
+  register: "healthchecks_pip"
   when: "healthchecks_manage_app | bool"
   notify: "Restart Healthchecks"
   become: "{{ healthchecks_become }}"
   become_user: "{{ healthchecks_user }}"
 
-- name: "Install gunicorn in the virtualenv"
-  ansible.builtin.pip:
-    name: "gunicorn"
-    virtualenv: "{{ healthchecks_venv_dir }}"
-    state: "present"
-  when: "healthchecks_manage_app | bool"
-  notify: "Restart Healthchecks"
+- name: "Mark the dependency install"
+  ansible.builtin.copy:
+    dest: "{{ healthchecks_python_lib_dir }}/.installed-{{ healthchecks_version }}"
+    content: "{{ healthchecks_version }}\n"
+    owner: "{{ healthchecks_app_owner }}"
+    group: "{{ healthchecks_app_group }}"
+    mode: "0644"
+  when:
+    - "healthchecks_manage_app | bool"
+    - "healthchecks_pip is changed"
   become: "{{ healthchecks_become }}"
-  become_user: "{{ healthchecks_user }}"
 
 - name: "Run database migrations"
   ansible.builtin.command:
-    cmd: "{{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py migrate --noinput"
+    cmd: "{{ healthchecks_python }} manage.py migrate --noinput"
+    chdir: "{{ healthchecks_src_dir }}"
   environment: "{{ healthchecks_environment }}"
   when: "healthchecks_manage_app | bool"
   changed_when: false
@@ -137,7 +190,8 @@
 
 - name: "Collect static files"
   ansible.builtin.command:
-    cmd: "{{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py collectstatic --noinput"
+    cmd: "{{ healthchecks_python }} manage.py collectstatic --noinput"
+    chdir: "{{ healthchecks_src_dir }}"
   environment: "{{ healthchecks_environment }}"
   when: "healthchecks_manage_app | bool"
   changed_when: false
@@ -147,7 +201,8 @@
 
 - name: "Compress static assets"
   ansible.builtin.command:
-    cmd: "{{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py compress --force"
+    cmd: "{{ healthchecks_python }} manage.py compress --force"
+    chdir: "{{ healthchecks_src_dir }}"
   environment: "{{ healthchecks_environment }}"
   when: "healthchecks_manage_app | bool"
   changed_when: false
@@ -159,8 +214,8 @@
   ansible.builtin.copy:
     dest: "{{ healthchecks_app_dir }}/.create-admin.py"
     mode: "0600"
-    owner: "{{ healthchecks_user }}"
-    group: "{{ healthchecks_group }}"
+    owner: "{{ healthchecks_app_owner }}"
+    group: "{{ healthchecks_app_group }}"
     content: |
       from django.contrib.auth import get_user_model
       User = get_user_model()
@@ -173,7 +228,8 @@
 
 - name: "Create the first admin user"
   ansible.builtin.shell:
-    cmd: "{{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py shell < {{ healthchecks_app_dir }}/.create-admin.py"
+    cmd: "{{ healthchecks_python }} manage.py shell < {{ healthchecks_app_dir }}/.create-admin.py"
+    chdir: "{{ healthchecks_src_dir }}"
   environment: "{{ healthchecks_environment }}"
   when: "healthchecks_manage_app | bool"
   changed_when: false
