@@ -265,7 +265,9 @@
     - "healthchecks-sendreports.service"
     - "healthchecks-prune.service"
     - "healthchecks-prune.timer"
-  notify: "Reload systemd"
+  notify:
+    - "Reload systemd"
+    - "Restart Healthchecks"
   become: "{{ healthchecks_become }}"
 
 - name: "Flush handlers before enabling the services"
