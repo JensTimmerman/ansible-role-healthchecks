@@ -8,8 +8,8 @@
       - "healthchecks_db_engine != 'postgresql' or healthchecks_db_password | length > 0"
       - >-
         not (healthchecks_assert_os | bool) or
-        ansible_os_family == 'Debian' or
-        (ansible_os_family == 'RedHat' and ansible_distribution_major_version == '9')
+        ansible_facts['os_family'] == 'Debian' or
+        (ansible_facts['os_family'] == 'RedHat' and ansible_facts['distribution_major_version'] == '9')
     fail_msg: >-
       Healthchecks needs a non-empty SECRET_KEY, admin password and (for
       PostgreSQL) DB password. This role supports Rocky Linux 9 (Python 3.12
@@ -32,7 +32,7 @@
     - "healthchecks_manage_packages | bool"
     - "healthchecks_manage_database | bool"
     - "healthchecks_db_engine == 'postgresql'"
-    - "ansible_os_family == 'RedHat'"
+    - "ansible_facts['os_family'] == 'RedHat'"
   become: "{{ healthchecks_become }}"
 
 - name: "Disable the distro PostgreSQL module (Rocky 9)"
@@ -42,7 +42,7 @@
     - "healthchecks_manage_packages | bool"
     - "healthchecks_manage_database | bool"
     - "healthchecks_db_engine == 'postgresql'"
-    - "ansible_os_family == 'RedHat'"
+    - "ansible_facts['os_family'] == 'RedHat'"
   changed_when: true
   failed_when: false
   become: "{{ healthchecks_become }}"
@@ -64,7 +64,7 @@
   when:
     - "healthchecks_manage_database | bool"
     - "healthchecks_db_engine == 'postgresql'"
-    - "ansible_os_family == 'RedHat'"
+    - "ansible_facts['os_family'] == 'RedHat'"
   become: "{{ healthchecks_become }}"
 
 - name: "Ensure PostgreSQL is running"
@@ -140,6 +140,17 @@
   become: "{{ healthchecks_become }}"
   become_user: "postgres"
 
+- name: "Write the Healthchecks environment file"
+  ansible.builtin.template:
+    src: "healthchecks.env.j2"
+    dest: "{{ healthchecks_env_file }}"
+    owner: "{{ healthchecks_file_owner }}"
+    group: "{{ healthchecks_file_group }}"
+    mode: "0600"
+  notify: "Restart Healthchecks"
+  no_log: true
+  become: "{{ healthchecks_become }}"
+
 - name: "Check out Healthchecks {{ healthchecks_version }}"
   ansible.builtin.git:
     repo: "{{ healthchecks_repo }}"
@@ -184,7 +195,6 @@
   environment: "{{ healthchecks_environment }}"
   when: "healthchecks_manage_app | bool"
   changed_when: false
-  no_log: true
   become: "{{ healthchecks_become }}"
   become_user: "{{ healthchecks_user }}"
 
@@ -195,7 +205,6 @@
   environment: "{{ healthchecks_environment }}"
   when: "healthchecks_manage_app | bool"
   changed_when: false
-  no_log: true
   become: "{{ healthchecks_become }}"
   become_user: "{{ healthchecks_user }}"
 
@@ -206,7 +215,6 @@
   environment: "{{ healthchecks_environment }}"
   when: "healthchecks_manage_app | bool"
   changed_when: false
-  no_log: true
   become: "{{ healthchecks_become }}"
   become_user: "{{ healthchecks_user }}"
 
@@ -221,7 +229,7 @@
       User = get_user_model()
       email = {{ healthchecks_admin_email | to_json }}
       if not User.objects.filter(email=email).exists():
-          User.objects.create_superuser(email=email, password={{ healthchecks_admin_password | to_json }})
+          User.objects.create_superuser(username=email, email=email, password={{ healthchecks_admin_password | to_json }})
   when: "healthchecks_manage_app | bool"
   no_log: true
   become: "{{ healthchecks_become }}"
@@ -233,7 +241,6 @@
   environment: "{{ healthchecks_environment }}"
   when: "healthchecks_manage_app | bool"
   changed_when: false
-  no_log: true
   become: "{{ healthchecks_become }}"
   become_user: "{{ healthchecks_user }}"
 
@@ -242,17 +249,6 @@
     path: "{{ healthchecks_app_dir }}/.create-admin.py"
     state: "absent"
   when: "healthchecks_manage_app | bool"
-  no_log: true
-  become: "{{ healthchecks_become }}"
-
-- name: "Write the Healthchecks environment file"
-  ansible.builtin.template:
-    src: "healthchecks.env.j2"
-    dest: "{{ healthchecks_env_file }}"
-    owner: "{{ healthchecks_file_owner }}"
-    group: "{{ healthchecks_file_group }}"
-    mode: "0600"
-  notify: "Restart Healthchecks"
   no_log: true
   become: "{{ healthchecks_become }}"
 

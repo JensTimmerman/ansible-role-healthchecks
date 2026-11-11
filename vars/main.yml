@@ -28,7 +28,7 @@ healthchecks_base_packages_debian:
 
 healthchecks_base_packages: >-
   {{ healthchecks_base_packages_redhat
-     if ansible_os_family == 'RedHat'
+     if ansible_facts['os_family'] == 'RedHat'
      else healthchecks_base_packages_debian }}
 
 healthchecks_postgresql_packages_redhat:
@@ -38,7 +38,7 @@ healthchecks_postgresql_packages_debian:
   - "postgresql"
 healthchecks_postgresql_packages: >-
   {{ healthchecks_postgresql_packages_redhat
-     if ansible_os_family == 'RedHat'
+     if ansible_facts['os_family'] == 'RedHat'
      else healthchecks_postgresql_packages_debian }}
 
 healthchecks_environment:
@@ -47,7 +47,7 @@ healthchecks_environment:
   SITE_ROOT: "{{ healthchecks_site_root }}"
   SITE_NAME: "{{ healthchecks_site_name }}"
   ALLOWED_HOSTS: "{{ healthchecks_allowed_hosts | join(',') }}"
-  DB: "{{ healthchecks_db_engine }}"
+  DB: "{{ 'postgres' if healthchecks_db_engine == 'postgresql' else healthchecks_db_engine }}"
   DB_NAME: "{{ healthchecks_db_name }}"
   DB_USER: "{{ healthchecks_db_user }}"
   DB_PASSWORD: "{{ healthchecks_db_password }}"
@@ -58,12 +58,12 @@ healthchecks_environment:
   EMAIL_PORT: "{{ healthchecks_email_port }}"
   EMAIL_HOST_USER: "{{ healthchecks_email_user }}"
   EMAIL_HOST_PASSWORD: "{{ healthchecks_email_password }}"
-  EMAIL_USE_TLS: "{{ healthchecks_email_use_tls | bool | lower }}"
-  EMAIL_USE_SSL: "{{ healthchecks_email_use_ssl | bool | lower }}"
-  EMAIL_USE_VERIFICATION: "{{ healthchecks_email_use_verification | bool | lower }}"
-  REGISTRATION_OPEN: "{{ healthchecks_registration_open | bool | lower }}"
-  USE_PAYMENTS: "{{ healthchecks_use_payments | bool | lower }}"
-  APPRISE_ENABLED: "{{ healthchecks_apprise_enabled | bool | lower }}"
-  PROMETHEUS_ENABLED: "{{ healthchecks_prometheus_enabled | bool | lower }}"
+  EMAIL_USE_TLS: "{{ healthchecks_email_use_tls | bool | ternary('True', 'False') }}"
+  EMAIL_USE_SSL: "{{ healthchecks_email_use_ssl | bool | ternary('True', 'False') }}"
+  EMAIL_USE_VERIFICATION: "{{ healthchecks_email_use_verification | bool | ternary('True', 'False') }}"
+  REGISTRATION_OPEN: "{{ healthchecks_registration_open | bool | ternary('True', 'False') }}"
+  USE_PAYMENTS: "{{ healthchecks_use_payments | bool | ternary('True', 'False') }}"
+  APPRISE_ENABLED: "{{ healthchecks_apprise_enabled | bool | ternary('True', 'False') }}"
+  PROMETHEUS_ENABLED: "{{ healthchecks_prometheus_enabled | bool | ternary('True', 'False') }}"
   SECURE_PROXY_SSL_HEADER: "HTTP_X_FORWARDED_PROTO,https"
   PYTHONPATH: "{{ healthchecks_python_lib_dir }}"
