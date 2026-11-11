@@ -1,0 +1,21 @@
+[Unit]
+Description=Healthchecks web
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ healthchecks_user }}
+Group={{ healthchecks_group }}
+WorkingDirectory={{ healthchecks_src_dir }}
+EnvironmentFile={{ healthchecks_env_file }}
+ExecStart={{ healthchecks_venv_dir }}/bin/gunicorn \
+    --bind {{ healthchecks_gunicorn_bind }} \
+    --workers {{ healthchecks_gunicorn_workers }} \
+    --timeout {{ healthchecks_gunicorn_timeout }} \
+    hc.wsgi:application
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

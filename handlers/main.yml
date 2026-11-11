@@ -1,0 +1,17 @@
+---
+- name: "Reload systemd"
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: "healthchecks_manage_services | bool"
+  become: "{{ healthchecks_become }}"
+
+- name: "Restart Healthchecks"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: "restarted"
+  loop:
+    - "healthchecks-web.service"
+    - "healthchecks-sendalerts.service"
+    - "healthchecks-sendreports.service"
+  when: "healthchecks_manage_services | bool"
+  become: "{{ healthchecks_become }}"

@@ -1,0 +1,233 @@
+---
+- name: "Assert required Healthchecks settings"
+  ansible.builtin.assert:
+    that:
+      - "healthchecks_secret_key | length > 0"
+      - "healthchecks_admin_password | length > 0"
+      - "healthchecks_db_engine in ['postgresql', 'sqlite']"
+      - "healthchecks_db_engine != 'postgresql' or healthchecks_db_password | length > 0"
+      - "not (healthchecks_assert_os | bool) or ansible_os_family == 'Debian'"
+    fail_msg: >-
+      Healthchecks needs a non-empty SECRET_KEY, admin password and (for
+      PostgreSQL) DB password. This role targets Debian 12/13 (Python 3.12+).
+    quiet: true
+
+- name: "Install Healthchecks system packages"
+  ansible.builtin.package:
+    name: "{{ healthchecks_packages }}"
+    state: "present"
+  when: "healthchecks_manage_packages | bool"
+  become: "{{ healthchecks_become }}"
+
+- name: "Create the Healthchecks group"
+  ansible.builtin.group:
+    name: "{{ healthchecks_group }}"
+    system: true
+    state: "present"
+  when: "healthchecks_manage_user | bool"
+  become: "{{ healthchecks_become }}"
+
+- name: "Create the Healthchecks user"
+  ansible.builtin.user:
+    name: "{{ healthchecks_user }}"
+    group: "{{ healthchecks_group }}"
+    home: "{{ healthchecks_app_dir }}"
+    shell: "/usr/sbin/nologin"
+    system: true
+    create_home: true
+    state: "present"
+  when: "healthchecks_manage_user | bool"
+  become: "{{ healthchecks_become }}"
+
+- name: "Create the Healthchecks directories"
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: "directory"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ healthchecks_app_dir }}", owner: "{{ healthchecks_app_owner }}", group: "{{ healthchecks_app_group }}", mode: "0755"}
+    - {path: "{{ healthchecks_config_dir }}", owner: "{{ healthchecks_file_owner }}", group: "{{ healthchecks_file_group }}", mode: "0700"}
+    - {path: "{{ healthchecks_sbin_dir }}", owner: "{{ healthchecks_file_owner }}", group: "{{ healthchecks_file_group }}", mode: "0755"}
+    - {path: "{{ healthchecks_unit_dir }}", owner: "{{ healthchecks_file_owner }}", group: "{{ healthchecks_file_group }}", mode: "0755"}
+  loop_control:
+    label: "{{ item.path }}"
+  become: "{{ healthchecks_become }}"
+
+- name: "Ensure PostgreSQL is running"
+  ansible.builtin.service:
+    name: "{{ healthchecks_postgresql_service }}"
+    state: "started"
+    enabled: true
+  when:
+    - "healthchecks_manage_database | bool"
+    - "healthchecks_db_engine == 'postgresql'"
+  become: "{{ healthchecks_become }}"
+
+- name: "Create the PostgreSQL role"
+  community.postgresql.postgresql_user:
+    name: "{{ healthchecks_db_user }}"
+    password: "{{ healthchecks_db_password }}"
+    role_attr_flags: "LOGIN"
+    state: "present"
+    login_unix_socket: "{{ healthchecks_postgresql_socket }}"
+  when:
+    - "healthchecks_manage_database | bool"
+    - "healthchecks_db_engine == 'postgresql'"
+  no_log: true
+  become: "{{ healthchecks_become }}"
+  become_user: "postgres"
+
+- name: "Create the PostgreSQL database"
+  community.postgresql.postgresql_db:
+    name: "{{ healthchecks_db_name }}"
+    owner: "{{ healthchecks_db_user }}"
+    state: "present"
+    login_unix_socket: "{{ healthchecks_postgresql_socket }}"
+  when:
+    - "healthchecks_manage_database | bool"
+    - "healthchecks_db_engine == 'postgresql'"
+  become: "{{ healthchecks_become }}"
+  become_user: "postgres"
+
+- name: "Check out Healthchecks {{ healthchecks_version }}"
+  ansible.builtin.git:
+    repo: "{{ healthchecks_repo }}"
+    dest: "{{ healthchecks_src_dir }}"
+    version: "{{ healthchecks_version }}"
+    depth: 1
+    force: true
+  when: "healthchecks_manage_app | bool"
+  notify: "Restart Healthchecks"
+  become: "{{ healthchecks_become }}"
+  become_user: "{{ healthchecks_user }}"
+
+- name: "Create the virtualenv and install Python requirements"
+  ansible.builtin.pip:
+    requirements: "{{ healthchecks_src_dir }}/requirements.txt"
+    virtualenv: "{{ healthchecks_venv_dir }}"
+    virtualenv_command: "{{ healthchecks_python }} -m venv"
+    state: "present"
+    extra_args: "--upgrade"
+  when: "healthchecks_manage_app | bool"
+  notify: "Restart Healthchecks"
+  become: "{{ healthchecks_become }}"
+  become_user: "{{ healthchecks_user }}"
+
+- name: "Install gunicorn in the virtualenv"
+  ansible.builtin.pip:
+    name: "gunicorn"
+    virtualenv: "{{ healthchecks_venv_dir }}"
+    state: "present"
+  when: "healthchecks_manage_app | bool"
+  notify: "Restart Healthchecks"
+  become: "{{ healthchecks_become }}"
+  become_user: "{{ healthchecks_user }}"
+
+- name: "Run database migrations"
+  ansible.builtin.command:
+    cmd: "{{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py migrate --noinput"
+  environment: "{{ healthchecks_environment }}"
+  when: "healthchecks_manage_app | bool"
+  changed_when: false
+  no_log: true
+  become: "{{ healthchecks_become }}"
+  become_user: "{{ healthchecks_user }}"
+
+- name: "Collect static files"
+  ansible.builtin.command:
+    cmd: "{{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py collectstatic --noinput"
+  environment: "{{ healthchecks_environment }}"
+  when: "healthchecks_manage_app | bool"
+  changed_when: false
+  no_log: true
+  become: "{{ healthchecks_become }}"
+  become_user: "{{ healthchecks_user }}"
+
+- name: "Compress static assets"
+  ansible.builtin.command:
+    cmd: "{{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py compress --force"
+  environment: "{{ healthchecks_environment }}"
+  when: "healthchecks_manage_app | bool"
+  changed_when: false
+  no_log: true
+  become: "{{ healthchecks_become }}"
+  become_user: "{{ healthchecks_user }}"
+
+- name: "Write the first-admin creation script"
+  ansible.builtin.copy:
+    dest: "{{ healthchecks_app_dir }}/.create-admin.py"
+    mode: "0600"
+    owner: "{{ healthchecks_user }}"
+    group: "{{ healthchecks_group }}"
+    content: |
+      from django.contrib.auth import get_user_model
+      User = get_user_model()
+      email = {{ healthchecks_admin_email | to_json }}
+      if not User.objects.filter(email=email).exists():
+          User.objects.create_superuser(email=email, password={{ healthchecks_admin_password | to_json }})
+  when: "healthchecks_manage_app | bool"
+  no_log: true
+  become: "{{ healthchecks_become }}"
+
+- name: "Create the first admin user"
+  ansible.builtin.shell:
+    cmd: "{{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py shell < {{ healthchecks_app_dir }}/.create-admin.py"
+  environment: "{{ healthchecks_environment }}"
+  when: "healthchecks_manage_app | bool"
+  changed_when: false
+  no_log: true
+  become: "{{ healthchecks_become }}"
+  become_user: "{{ healthchecks_user }}"
+
+- name: "Remove the admin creation script"
+  ansible.builtin.file:
+    path: "{{ healthchecks_app_dir }}/.create-admin.py"
+    state: "absent"
+  when: "healthchecks_manage_app | bool"
+  no_log: true
+  become: "{{ healthchecks_become }}"
+
+- name: "Write the Healthchecks environment file"
+  ansible.builtin.template:
+    src: "healthchecks.env.j2"
+    dest: "{{ healthchecks_env_file }}"
+    owner: "{{ healthchecks_file_owner }}"
+    group: "{{ healthchecks_file_group }}"
+    mode: "0600"
+  notify: "Restart Healthchecks"
+  no_log: true
+  become: "{{ healthchecks_become }}"
+
+- name: "Install the Healthchecks systemd units"
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "{{ healthchecks_unit_dir }}/{{ item }}"
+    owner: "{{ healthchecks_file_owner }}"
+    group: "{{ healthchecks_file_group }}"
+    mode: "0644"
+  loop:
+    - "healthchecks-web.service"
+    - "healthchecks-sendalerts.service"
+    - "healthchecks-sendreports.service"
+    - "healthchecks-prune.service"
+    - "healthchecks-prune.timer"
+  notify: "Reload systemd"
+  become: "{{ healthchecks_become }}"
+
+- name: "Flush handlers before enabling the services"
+  ansible.builtin.meta: "flush_handlers"
+
+- name: "Enable and start the Healthchecks services"
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: "started"
+  loop:
+    - "healthchecks-web.service"
+    - "healthchecks-sendalerts.service"
+    - "healthchecks-sendreports.service"
+    - "healthchecks-prune.timer"
+  when: "healthchecks_manage_services | bool"
+  become: "{{ healthchecks_become }}"

@@ -1,0 +1,82 @@
+---
+# Role: healthchecks
+# Default variables (lowest priority - can be overridden).
+#
+# Native install of Healthchecks (https://healthchecks.io) on Debian:
+# Python venv, PostgreSQL, gunicorn and systemd. No Docker or Podman.
+# The reverse proxy / TLS is supplied by the caller (webproxy in the
+# caret ansible repo); this role listens on 127.0.0.1:8000.
+
+# Release tag pinned for reproducible installs. Bump deliberately.
+healthchecks_version: "v5.0.3"
+healthchecks_repo: "https://github.com/healthchecks/healthchecks.git"
+
+healthchecks_user: "healthchecks"
+healthchecks_group: "healthchecks"
+healthchecks_app_dir: "/opt/healthchecks"
+healthchecks_src_dir: "{{ healthchecks_app_dir }}/app"
+healthchecks_venv_dir: "{{ healthchecks_app_dir }}/venv"
+
+healthchecks_config_dir: "/etc/healthchecks"
+healthchecks_env_file: "{{ healthchecks_config_dir }}/healthchecks.env"
+healthchecks_sbin_dir: "/usr/local/sbin"
+healthchecks_unit_dir: "/etc/systemd/system"
+
+healthchecks_python: "python3"
+healthchecks_become: true
+
+# Ownership used by the app dir and the config/unit files. Molecule
+# overrides these because it runs unprivileged.
+healthchecks_app_owner: "{{ healthchecks_user }}"
+healthchecks_app_group: "{{ healthchecks_group }}"
+healthchecks_file_owner: "root"
+healthchecks_file_group: "root"
+
+# Gates (molecule turns the privileged/networked parts off).
+healthchecks_assert_os: true
+healthchecks_manage_packages: true
+healthchecks_manage_user: true
+healthchecks_manage_database: true
+healthchecks_manage_app: true
+healthchecks_manage_services: true
+
+# Site.
+healthchecks_site_root: "https://health.example.org"
+healthchecks_site_name: "Healthchecks"
+healthchecks_allowed_hosts:
+  - "health.example.org"
+healthchecks_secret_key: ""
+healthchecks_admin_email: "admin@example.org"
+healthchecks_admin_password: ""
+healthchecks_registration_open: false
+healthchecks_use_payments: false
+healthchecks_apprise_enabled: false
+healthchecks_prometheus_enabled: true
+healthchecks_email_use_verification: false
+
+# Database. postgresql (default) or sqlite.
+healthchecks_db_engine: "postgresql"
+healthchecks_db_name: "healthchecks"
+healthchecks_db_user: "healthchecks"
+healthchecks_db_password: ""
+healthchecks_db_host: "127.0.0.1"
+healthchecks_db_port: 5432
+healthchecks_postgresql_service: "postgresql"
+healthchecks_postgresql_socket: "/var/run/postgresql"
+
+# Outbound mail. Port 25 internally to mail.caret.be; no TLS on the LAN.
+healthchecks_email_host: "localhost"
+healthchecks_email_port: 25
+healthchecks_email_user: ""
+healthchecks_email_password: ""
+healthchecks_email_use_tls: false
+healthchecks_email_use_ssl: false
+healthchecks_default_from_email: "healthchecks@example.org"
+
+# Gunicorn.
+healthchecks_gunicorn_bind: "127.0.0.1:8000"
+healthchecks_gunicorn_workers: 3
+healthchecks_gunicorn_timeout: 60
+
+# Cleanup timer.
+healthchecks_prune_oncalendar: "*-*-* 03:30:00"

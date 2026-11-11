@@ -1,0 +1,48 @@
+---
+- name: "Verify"
+  hosts: "localhost"
+  connection: "local"
+  gather_facts: false
+  tasks:
+    - name: "Read the rendered environment file"
+      ansible.builtin.slurp:
+        src: "/tmp/molecule-healthchecks/etc/healthchecks.env"
+      register: "healthchecks_molecule_env_raw"
+      changed_when: false
+      check_mode: false
+
+    - name: "Decode the environment file"
+      ansible.builtin.set_fact:
+        healthchecks_molecule_env: "{{ healthchecks_molecule_env_raw.content | b64decode }}"
+      changed_when: false
+
+    - name: "Assert the environment file has the site, DB and mail settings"
+      ansible.builtin.assert:
+        that:
+          - "'SITE_ROOT=\"https://health.example.org\"' in healthchecks_molecule_env"
+          - "'DB=postgresql' in healthchecks_molecule_env"
+          - "'EMAIL_HOST=\"localhost\"' in healthchecks_molecule_env"
+          - "'SECURE_PROXY_SSL_HEADER=\"HTTP_X_FORWARDED_PROTO,https\"' in healthchecks_molecule_env"
+        fail_msg: "Rendered Healthchecks env file is missing required settings."
+        success_msg: "Healthchecks env file rendered correctly."
+        quiet: true
+
+    - name: "Stat the rendered systemd units"
+      ansible.builtin.stat:
+        path: "/tmp/molecule-healthchecks/systemd/{{ item }}"
+      loop:
+        - "healthchecks-web.service"
+        - "healthchecks-sendalerts.service"
+        - "healthchecks-sendreports.service"
+        - "healthchecks-prune.service"
+        - "healthchecks-prune.timer"
+      register: "healthchecks_molecule_units"
+      changed_when: false
+
+    - name: "Assert all units exist"
+      ansible.builtin.assert:
+        that:
+          - "healthchecks_molecule_units.results | rejectattr('stat.exists') | list | length == 0"
+        fail_msg: "A Healthchecks systemd unit is missing."
+        success_msg: "All Healthchecks units rendered."
+        quiet: true

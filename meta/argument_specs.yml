@@ -1,0 +1,194 @@
+---
+argument_specs:
+  main:
+    short_description: "Native Healthchecks deployment on Debian"
+    description:
+      - "Clones a pinned Healthchecks release, installs it into a Python"
+      - "virtualenv, configures PostgreSQL (or SQLite), runs migrations,"
+      - "creates the first admin, and runs gunicorn plus the sendalerts,"
+      - "sendreports and cleanup services under systemd. No Docker."
+      - "A reverse proxy is supplied by the caller."
+    author:
+      - "Jens Timmerman"
+
+    options:
+      healthchecks_version:
+        type: "str"
+        required: false
+        default: "v5.0.3"
+        description: "Git tag of healthchecks/healthchecks to deploy."
+
+      healthchecks_repo:
+        type: "str"
+        required: false
+        default: "https://github.com/healthchecks/healthchecks.git"
+        description: "Source repository."
+
+      healthchecks_user:
+        type: "str"
+        required: false
+        default: "healthchecks"
+        description: "System user running the app."
+
+      healthchecks_group:
+        type: "str"
+        required: false
+        default: "healthchecks"
+        description: "System group."
+
+      healthchecks_app_dir:
+        type: "str"
+        required: false
+        default: "/opt/healthchecks"
+        description: "Application root (source + venv)."
+
+      healthchecks_config_dir:
+        type: "str"
+        required: false
+        default: "/etc/healthchecks"
+        description: "Configuration directory."
+
+      healthchecks_env_file:
+        type: "str"
+        required: false
+        default: "{{ healthchecks_config_dir }}/healthchecks.env"
+        description: "EnvironmentFile read by systemd (0600)."
+
+      healthchecks_unit_dir:
+        type: "str"
+        required: false
+        default: "/etc/systemd/system"
+        description: "systemd unit directory."
+
+      healthchecks_site_root:
+        type: "str"
+        required: false
+        default: "https://health.example.org"
+        description: "Public base URL (SITE_ROOT)."
+
+      healthchecks_site_name:
+        type: "str"
+        required: false
+        default: "Healthchecks"
+        description: "Display name."
+
+      healthchecks_allowed_hosts:
+        type: "list"
+        elements: "str"
+        required: false
+        default:
+          - "health.example.org"
+        description: "ALLOWED_HOSTS."
+
+      healthchecks_secret_key:
+        type: "str"
+        required: true
+        description: "Django SECRET_KEY (vaulted, at least 32 random characters)."
+
+      healthchecks_admin_email:
+        type: "str"
+        required: false
+        default: "admin@example.org"
+        description: "First admin email."
+
+      healthchecks_admin_password:
+        type: "str"
+        required: true
+        description: "First admin password (vaulted)."
+
+      healthchecks_db_engine:
+        type: "str"
+        required: false
+        default: "postgresql"
+        choices: ["postgresql", "sqlite"]
+        description: "Database engine."
+
+      healthchecks_db_name:
+        type: "str"
+        required: false
+        default: "healthchecks"
+        description: "Database name (or SQLite path when engine=sqlite)."
+
+      healthchecks_db_user:
+        type: "str"
+        required: false
+        default: "healthchecks"
+        description: "PostgreSQL role."
+
+      healthchecks_db_password:
+        type: "str"
+        required: false
+        default: ""
+        description: "PostgreSQL password (required for postgresql)."
+
+      healthchecks_db_host:
+        type: "str"
+        required: false
+        default: "127.0.0.1"
+        description: "PostgreSQL host."
+
+      healthchecks_db_port:
+        type: "int"
+        required: false
+        default: 5432
+        description: "PostgreSQL port."
+
+      healthchecks_email_host:
+        type: "str"
+        required: false
+        default: "localhost"
+        description: "Outbound SMTP host."
+
+      healthchecks_email_port:
+        type: "int"
+        required: false
+        default: 25
+        description: "Outbound SMTP port."
+
+      healthchecks_email_use_tls:
+        type: "bool"
+        required: false
+        default: false
+        description: "Explicit TLS (port 587)."
+
+      healthchecks_email_use_ssl:
+        type: "bool"
+        required: false
+        default: false
+        description: "Implicit TLS (port 465)."
+
+      healthchecks_default_from_email:
+        type: "str"
+        required: false
+        default: "healthchecks@example.org"
+        description: "From address."
+
+      healthchecks_manage_packages:
+        type: "bool"
+        required: false
+        default: true
+        description: "Install Debian packages."
+
+      healthchecks_manage_user:
+        type: "bool"
+        required: false
+        default: true
+        description: "Create the system user/group."
+
+      healthchecks_manage_database:
+        type: "bool"
+        required: false
+        default: true
+        description: "Create the local PostgreSQL role/database."
+
+      healthchecks_manage_app:
+        type: "bool"
+        required: false
+        default: true
+        description: "Clone, install, migrate and create the admin."
+
+      healthchecks_manage_services:
+        type: "bool"
+        required: false
+        default: true
+        description: "Enable/start the systemd services."

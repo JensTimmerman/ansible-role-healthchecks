@@ -1,0 +1,22 @@
+---
+galaxy_info:
+  role_name: "healthchecks"
+  author: "Jens Timmerman"
+  description: "Native Healthchecks (cron/dead-man monitoring) on Debian: Python venv, PostgreSQL, gunicorn, systemd"
+  license: "MIT"
+  min_ansible_version: "2.15"
+
+  platforms:
+    - name: "Debian"
+      versions:
+        - "bookworm"
+        - "trixie"
+
+  galaxy_tags:
+    - "healthchecks"
+    - "monitoring"
+    - "cron"
+    - "django"
+    - "systemd"
+
+dependencies: []

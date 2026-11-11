@@ -1,0 +1,39 @@
+---
+- name: "Converge"
+  hosts: "localhost"
+  connection: "local"
+  gather_facts: true
+  vars:
+    healthchecks_molecule_dir: "/tmp/molecule-healthchecks"
+    healthchecks_assert_os: false
+    healthchecks_become: false
+    healthchecks_manage_packages: false
+    healthchecks_manage_user: false
+    healthchecks_manage_database: false
+    healthchecks_manage_app: false
+    healthchecks_manage_services: false
+    healthchecks_app_dir: "/tmp/molecule-healthchecks/opt"
+    healthchecks_config_dir: "/tmp/molecule-healthchecks/etc"
+    healthchecks_env_file: "/tmp/molecule-healthchecks/etc/healthchecks.env"
+    healthchecks_sbin_dir: "/tmp/molecule-healthchecks/sbin"
+    healthchecks_unit_dir: "/tmp/molecule-healthchecks/systemd"
+    healthchecks_app_owner: "{{ ansible_user_id }}"
+    healthchecks_app_group: "{{ ansible_user_gid }}"
+    healthchecks_file_owner: "{{ ansible_user_id }}"
+    healthchecks_file_group: "{{ ansible_user_gid }}"
+    healthchecks_secret_key: "{{ 'molecule-secret-key' }}"
+    healthchecks_admin_password: "{{ 'molecule-admin-password' }}"
+    healthchecks_db_password: "{{ 'molecule-db-password' }}"
+    healthchecks_site_root: "https://health.example.org"
+    healthchecks_allowed_hosts:
+      - "health.example.org"
+  tasks:
+    - name: "Create the isolated test directory"
+      ansible.builtin.file:
+        path: "{{ healthchecks_molecule_dir }}"
+        state: "directory"
+        mode: "0755"
+
+    - name: "Apply the healthchecks role"
+      ansible.builtin.include_role:
+        name: "healthchecks"

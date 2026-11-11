@@ -1,0 +1,35 @@
+---
+dependency:
+  name: "galaxy"
+  enabled: false
+role_name_check: 1
+driver:
+  name: "default"
+platforms:
+  - name: "localhost"
+    groups:
+      - "healthchecks_test"
+provisioner:
+  name: "ansible"
+  playbooks:
+    converge: "converge.yml"
+    verify: "verify.yml"
+  inventory:
+    hosts:
+      all:
+        hosts:
+          localhost:
+            ansible_connection: "local"
+verifier:
+  name: "ansible"
+scenario:
+  name: "default"
+  test_sequence:
+    - "dependency"
+    - "syntax"
+    - "create"
+    - "prepare"
+    - "converge"
+    - "idempotence"
+    - "verify"
+    - "destroy"

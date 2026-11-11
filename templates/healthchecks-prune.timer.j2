@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Healthchecks database cleanup
+
+[Timer]
+OnCalendar={{ healthchecks_prune_oncalendar }}
+Persistent=true
+Unit=healthchecks-prune.service
+
+[Install]
+WantedBy=timers.target

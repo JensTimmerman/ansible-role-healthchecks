@@ -1,0 +1,17 @@
+[Unit]
+Description=Healthchecks alert sender
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ healthchecks_user }}
+Group={{ healthchecks_group }}
+WorkingDirectory={{ healthchecks_src_dir }}
+EnvironmentFile={{ healthchecks_env_file }}
+ExecStart={{ healthchecks_venv_dir }}/bin/python {{ healthchecks_src_dir }}/manage.py sendalerts --skip-checks
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
