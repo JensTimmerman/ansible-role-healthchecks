@@ -45,6 +45,7 @@ healthchecks_site_root: "https://health.example.org"
 healthchecks_site_name: "Healthchecks"
 healthchecks_allowed_hosts:
   - "health.example.org"
+healthchecks_rp_id: ""
 healthchecks_secret_key: ""
 healthchecks_admin_email: "admin@example.org"
 healthchecks_admin_password: ""

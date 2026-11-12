@@ -71,6 +71,7 @@ The first admin is created idempotently from `healthchecks_admin_email` /
 | `healthchecks_version` | `v5.0.3` | Pinned upstream tag |
 | `healthchecks_site_root` | `https://health.example.org` | Public URL |
 | `healthchecks_allowed_hosts` | `["health.example.org"]` | Django ALLOWED_HOSTS |
+| `healthchecks_rp_id` | `""` | WebAuthn RP ID / effective domain; empty disables passkey 2FA |
 | `healthchecks_secret_key` | required | Django SECRET_KEY |
 | `healthchecks_admin_email` | `admin@example.org` | First admin |
 | `healthchecks_admin_password` | required | First admin password |
@@ -91,6 +92,26 @@ The first admin is created idempotently from `healthchecks_admin_email` /
 | `healthchecks_manage_services` | `true` | Enable/start units |
 
 See `defaults/main.yml` and `meta/argument_specs.yml` for the full list.
+
+## Passkey two-factor authentication
+
+Healthchecks v5.0.3 ships built-in WebAuthn/passkey **two-factor**
+authentication (2FA: password first, then passkey — it is not passwordless).
+It uses the `fido2` package already pulled in by the upstream
+`requirements.txt`; no extra package is required.
+
+Set `healthchecks_rp_id` to the effective domain of the site (for example
+`health.caret.be`) to enable it; the role renders this as `RP_ID` in the
+environment file. The empty default keeps the feature disabled.
+
+The RP ID must match the browser origin, and WebAuthn requires a secure
+context: users must open Healthchecks at its canonical HTTPS URL (for example
+`https://health.caret.be`), not via an IP address or plain HTTP. After signing
+in with the password, register a key under **Profile → Add security key**; the
+passkey is then requested as the second factor on the next login.
+
+`REMOTE_USER_HEADER` / `CustomHeaderBackend` exists for a future passkey SSO
+proxy; the role does not configure it.
 
 ## Molecule
 
